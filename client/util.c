@@ -7,6 +7,14 @@
 
 static void log_output(const char *text);
 
+static UiOutputHook g_output_hook = NULL;
+
+#if defined(_MSC_VER) && _MSC_VER < 1900
+#define VSNPRINTF _vsnprintf
+#else
+#define VSNPRINTF vsnprintf
+#endif
+
 #if defined(_MSC_VER) && _MSC_VER < 1900
 /*
  * Returns -1 on truncation (C99 would return the needed length); callers
@@ -209,10 +217,42 @@ void get_windows_version(char *buf, size_t bufsize)
     }
 }
 
+void ui_set_output_hook(UiOutputHook hook)
+{
+    g_output_hook = hook;
+}
+
+void ui_write(int kind, const char *text)
+{
+    if (g_output_hook) {
+        g_output_hook(kind, text);
+        return;
+    }
+
+    if (kind == UI_TEXT_ERROR) {
+        fputs(text, stderr);
+    } else {
+        fputs(text, stdout);
+        fflush(stdout);
+    }
+}
+
+void ui_printf(const char *fmt, ...)
+{
+    char buf[1024];
+    va_list args;
+
+    va_start(args, fmt);
+    VSNPRINTF(buf, sizeof(buf), fmt, args);
+    va_end(args);
+    buf[sizeof(buf) - 1] = '\0';
+
+    ui_write(UI_TEXT_INFO, buf);
+}
+
 void print_output(const char *text)
 {
-    printf("%s", text);
-    fflush(stdout);
+    ui_write(UI_TEXT_CLAUDE, text);
     log_output(text);
 }
 
@@ -234,7 +274,10 @@ void log_user_input(const char *text)
 
 void log_error(const char *context, const char *message)
 {
-    fprintf(stderr, "[Error: %s: %s]\n", context, message);
+    char buf[512];
+
+    snprintf(buf, sizeof(buf), "[Error: %s: %s]\n", context, message);
+    ui_write(UI_TEXT_ERROR, buf);
     if (g_state.logfile) {
         fprintf(g_state.logfile, "[Error: %s: %s]\n", context, message);
         fflush(g_state.logfile);
@@ -261,7 +304,7 @@ void config_load(const char *filename)
         return;
     }
 
-    printf("[Loading config from %s]\n", filename);
+    ui_printf("[Loading config from %s]\n", filename);
 
     while (fgets(line, sizeof(line), fp)) {
         char *p = line + strlen(line) - 1;
@@ -289,22 +332,25 @@ void config_load(const char *filename)
                     strncpy(g_state.server_ip, value,
                             sizeof(g_state.server_ip) - 1);
                     g_state.server_ip[sizeof(g_state.server_ip) - 1] = '\0';
-                    printf("[Config: server ip = %s]\n", g_state.server_ip);
+                    ui_printf("[Config: server ip = %s]\n",
+                              g_state.server_ip);
                 } else if (strcmp(key, "api_port") == 0) {
                     g_state.server_port = atoi(value);
-                    printf("[Config: api port = %d]\n", g_state.server_port);
+                    ui_printf("[Config: api port = %d]\n",
+                              g_state.server_port);
                 } else if (strcmp(key, "download_port") == 0) {
                     g_state.download_port = atoi(value);
-                    printf("[Config: download port = %d]\n",
-                           g_state.download_port);
+                    ui_printf("[Config: download port = %d]\n",
+                              g_state.download_port);
                 } else if (strcmp(key, "upload_port") == 0) {
                     g_state.upload_port = atoi(value);
-                    printf("[Config: upload port = %d]\n", g_state.upload_port);
+                    ui_printf("[Config: upload port = %d]\n",
+                              g_state.upload_port);
                 } else if (strcmp(key, "skip_permissions") == 0) {
                     g_state.skip_permissions =
                         (strcmp(value, "true") == 0 || strcmp(value, "1") == 0);
-                    printf("[Config: skip_permissions = %s]\n",
-                           g_state.skip_permissions ? "true" : "false");
+                    ui_printf("[Config: skip_permissions = %s]\n",
+                              g_state.skip_permissions ? "true" : "false");
                 }
             }
         }

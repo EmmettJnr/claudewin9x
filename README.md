@@ -123,6 +123,25 @@ The client also builds with Microsoft Visual C++ 6.0, either from the IDE or the
 
 Both link the static multithreaded CRT (`/MT`), so the exe only depends on `KERNEL32.DLL` and `WS2_32.DLL`. The `.dsp`/`.dsw`/`Makefile.vc6` files must keep CRLF line endings for VC6 to load them (see `.gitattributes`).
 
+#### GUI client (MFC)
+
+`client\gui` contains `ClaudeWin9x-Gui.exe`, an MFC front end built with Visual C++ 6.0. It shares the networking, file operation and command code with the console client, and replaces the console with a resizable window:
+
+- Chat transcript (rich edit, colour-coded: your messages, Claude, client activity, errors)
+- Multi-line input with normal cursor editing: Enter sends, Shift+Enter adds a line, Ctrl+Up/Down recalls earlier messages
+- Allow/Deny dialog for tool requests (Deny is the default button), and an auto-approve checkbox
+- Commands run in a hidden window rather than flashing a DOS box
+- UTF-8 from the server is converted to the Windows code page (Windows 98 and later)
+
+It reads the same `client.ini`, from the folder the exe is in. Build it from the `ClaudeWin9xGui` project in `client\ClaudeWin9xClient.dsw`, or from the command line after `VCVARS32.BAT`:
+
+```
+cd client\gui
+nmake /f Makefile.vc6
+```
+
+MFC and the CRT are linked statically, so it runs without `MFC42.DLL` or `MSVCRT.DLL`.
+
 ### Server
 
 ```bash

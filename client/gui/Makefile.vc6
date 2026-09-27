@@ -1,0 +1,63 @@
+# Build the MFC GUI client with Microsoft Visual C++ 6.0 (NMAKE).
+#
+# From a command prompt, run VCVARS32.BAT (in VC98\BIN) and then:
+#   nmake /f Makefile.vc6
+#   nmake /f Makefile.vc6 clean
+#
+# MFC and the CRT are linked statically (/MT, no _AFXDLL), so the exe does
+# not need MFC42.DLL or MSVCRT.DLL. Uses RICHED32.DLL, which ships with
+# Windows 95 and later.
+
+CC = cl
+RC = rc
+LINK = link
+
+COMMON_FLAGS = /nologo /W3 /O2 /MT /D WIN32 /D NDEBUG /D _WINDOWS /D _MBCS
+CPPFLAGS = $(COMMON_FLAGS) /GX
+CFLAGS = $(COMMON_FLAGS) /D CJSON_HIDE_SYMBOLS
+# LNK4089 (unused DLL references dropped) is normal for static MFC builds
+LDFLAGS = /nologo /subsystem:windows /release /ignore:4089
+LIBS = ws2_32.lib
+
+TARGET = ClaudeWin9x-Gui.exe
+RESOURCE_RES = ClaudeGui.res
+
+GUI_OBJECTS = StdAfx.obj ClaudeGui.obj ClaudeGuiDlg.obj ApprovalDlg.obj
+CORE_OBJECTS = gui_core.obj http.obj handlers.obj util.obj cJSON.obj
+OBJECTS = $(GUI_OBJECTS) $(CORE_OBJECTS)
+
+all: $(TARGET)
+
+.cpp.obj:
+	$(CC) $(CPPFLAGS) /c $<
+
+$(GUI_OBJECTS): StdAfx.h resource.h
+ClaudeGui.obj: ClaudeGui.h ClaudeGuiDlg.h
+ClaudeGuiDlg.obj: ClaudeGui.h ClaudeGuiDlg.h ApprovalDlg.h gui_core.h
+ApprovalDlg.obj: ClaudeGui.h ApprovalDlg.h
+
+gui_core.obj: gui_core.c gui_core.h ..\claude.h ..\util.h ..\handlers.h
+	$(CC) $(CFLAGS) /c gui_core.c
+
+http.obj: ..\http.c ..\http.h ..\claude.h
+	$(CC) $(CFLAGS) /c ..\http.c
+
+handlers.obj: ..\handlers.c ..\handlers.h ..\claude.h ..\util.h
+	$(CC) $(CFLAGS) /c ..\handlers.c
+
+util.obj: ..\util.c ..\util.h ..\claude.h
+	$(CC) $(CFLAGS) /c ..\util.c
+
+cJSON.obj: ..\third_party\cJSON.c ..\third_party\cJSON.h
+	$(CC) $(CFLAGS) /c ..\third_party\cJSON.c
+
+$(RESOURCE_RES): ClaudeGui.rc resource.h ..\..\build\icons\client.ico
+	$(RC) /fo$(RESOURCE_RES) ClaudeGui.rc
+
+$(TARGET): $(OBJECTS) $(RESOURCE_RES)
+	$(LINK) $(LDFLAGS) /out:$(TARGET) $(OBJECTS) $(RESOURCE_RES) $(LIBS)
+
+clean:
+	-del *.obj
+	-del $(RESOURCE_RES)
+	-del $(TARGET)

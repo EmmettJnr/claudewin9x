@@ -18,6 +18,12 @@ static int fs_cache_index = 0;
 static CacheEntry cmd_cache[IDEMPOTENCY_CACHE_SIZE];
 static int cmd_cache_index = 0;
 
+/* Run commands in a hidden window (see execute_command_hidden) */
+static int g_hidden_exec = 0;
+
+/* A hidden command that runs this long is assumed stuck (e.g. on a prompt) */
+#define COMMAND_TIMEOUT_MS (10 * 60 * 1000)
+
 static const char *cache_lookup(CacheEntry *cache, const char *id)
 {
     int i;
@@ -439,7 +445,8 @@ int handle_fileop(void)
 
     cached_result = cache_lookup(fs_cache, op_id->valuestring);
     if (cached_result) {
-        printf("[FS: replaying cached result for %s]\n", op_id->valuestring);
+        ui_printf("[FS: replaying cached result for %s]\n",
+                  op_id->valuestring);
         ret = http_request("POST", "/fs/result", cached_result, response,
                            sizeof(response));
         if (ret != HTTP_OK) {
@@ -450,7 +457,7 @@ int handle_fileop(void)
     }
 
     op = operation->valuestring;
-    printf("[FS: %s %s]\n", op, filepath->valuestring);
+    ui_printf("[FS: %s %s]\n", op, filepath->valuestring);
 
     if (build_full_path(filepath->valuestring, full_path, sizeof(full_path)) <
         0) {
@@ -534,15 +541,9 @@ static int execute_command_nt(const char *command, char *output,
  * Execute command on Windows 95/98/ME
  * Uses temp file redirection since popen and stdout on Windows 9x is crap and limited..
  */
-static int execute_command_9x(const char *command, char *output,
-                              size_t output_size)
+static void get_temp_output_path(char *temp_file, size_t size)
 {
-    char cmdline[2048];
-    char temp_file[MAX_PATH];
     const char *temp_dir;
-    FILE *fp;
-    int exit_code;
-    size_t max_cmd_len;
 
     temp_dir = getenv("TEMP");
     if (!temp_dir) {
@@ -552,22 +553,14 @@ static int execute_command_9x(const char *command, char *output,
         temp_dir = "C:";
     }
 
-    snprintf(temp_file, sizeof(temp_file), "%s\\CMDOUT.TMP", temp_dir);
+    snprintf(temp_file, size, "%s\\CMDOUT.TMP", temp_dir);
+}
 
-    max_cmd_len = sizeof(cmdline) - 15 - 3 - strlen(temp_file) - 1;
-
-    if (strlen(command) > max_cmd_len) {
-        strncpy(output, "Command too long", output_size - 1);
-        output[output_size - 1] = '\0';
-        return -1;
-    }
-
-    snprintf(cmdline, sizeof(cmdline), "command.com /c %s > %s", command,
-             temp_file);
-
-    printf("[Exec: %s]\n", cmdline);
-    exit_code = system(cmdline);
-    printf("[Exit: %d]\n", exit_code);
+/* Reads the redirected command output into output, then deletes the file */
+static void read_temp_output(const char *temp_file, char *output,
+                             size_t output_size, const char *context)
+{
+    FILE *fp;
 
     fp = fopen(temp_file, "r");
     if (fp) {
@@ -580,14 +573,114 @@ static int execute_command_9x(const char *command, char *output,
         output[output_len] = '\0';
         fclose(fp);
         remove(temp_file);
-        printf("[Read %d chars from temp]\n", output_len);
+        ui_printf("[Read %d chars from temp]\n", output_len);
     } else {
-        log_error("exec_9x", "Could not open temp file");
+        log_error(context, "Could not open temp file");
         strncpy(output, "Error: Could not capture output", output_size - 1);
         output[output_size - 1] = '\0';
     }
+}
+
+static int execute_command_9x(const char *command, char *output,
+                              size_t output_size)
+{
+    char cmdline[2048];
+    char temp_file[MAX_PATH];
+    int exit_code;
+    size_t max_cmd_len;
+
+    get_temp_output_path(temp_file, sizeof(temp_file));
+
+    max_cmd_len = sizeof(cmdline) - 15 - 3 - strlen(temp_file) - 1;
+
+    if (strlen(command) > max_cmd_len) {
+        strncpy(output, "Command too long", output_size - 1);
+        output[output_size - 1] = '\0';
+        return -1;
+    }
+
+    snprintf(cmdline, sizeof(cmdline), "command.com /c %s > %s", command,
+             temp_file);
+
+    ui_printf("[Exec: %s]\n", cmdline);
+    exit_code = system(cmdline);
+    ui_printf("[Exit: %d]\n", exit_code);
+
+    read_temp_output(temp_file, output, output_size, "exec_9x");
 
     return exit_code;
+}
+
+/*
+ * Execute a command without a console window, for GUI front ends where
+ * _popen does not work and system() would flash a DOS box. Output is
+ * redirected to a temp file on both 9x and NT.
+ */
+static int execute_command_hidden(const char *command, char *output,
+                                  size_t output_size, int is_nt)
+{
+    char cmdline[2048];
+    char temp_file[MAX_PATH];
+    STARTUPINFO si;
+    PROCESS_INFORMATION pi;
+    DWORD exit_code = 0;
+    int len;
+
+    get_temp_output_path(temp_file, sizeof(temp_file));
+
+    if (is_nt) {
+        /* Outer quotes keep cmd.exe from stripping quotes in the command */
+        len = snprintf(cmdline, sizeof(cmdline),
+                       "cmd.exe /c \"%s > \"%s\" 2>&1\"", command, temp_file);
+    } else {
+        len = snprintf(cmdline, sizeof(cmdline), "command.com /c %s > %s",
+                       command, temp_file);
+    }
+
+    if (len < 0 || (size_t)len >= sizeof(cmdline)) {
+        strncpy(output, "Command too long", output_size - 1);
+        output[output_size - 1] = '\0';
+        return -1;
+    }
+
+    memset(&si, 0, sizeof(si));
+    si.cb = sizeof(si);
+    si.dwFlags = STARTF_USESHOWWINDOW;
+    si.wShowWindow = SW_HIDE;
+
+    ui_printf("[Exec: %s]\n", cmdline);
+
+    if (!CreateProcess(NULL, cmdline, NULL, NULL, FALSE, 0, NULL, NULL, &si,
+                       &pi)) {
+        strncpy(output, "Failed to execute command", output_size - 1);
+        output[output_size - 1] = '\0';
+        return -1;
+    }
+
+    if (WaitForSingleObject(pi.hProcess, COMMAND_TIMEOUT_MS) ==
+        WAIT_TIMEOUT) {
+        /* Most likely waiting for input that can never arrive */
+        log_error("exec", "Command timed out, terminating it");
+        TerminateProcess(pi.hProcess, 1);
+        WaitForSingleObject(pi.hProcess, 5000);
+        exit_code = (DWORD)-1;
+    } else {
+        GetExitCodeProcess(pi.hProcess, &exit_code);
+    }
+
+    CloseHandle(pi.hThread);
+    CloseHandle(pi.hProcess);
+
+    ui_printf("[Exit: %d]\n", (int)exit_code);
+
+    read_temp_output(temp_file, output, output_size, "exec");
+
+    return (int)exit_code;
+}
+
+void handlers_set_hidden_exec(int enabled)
+{
+    g_hidden_exec = enabled;
 }
 
 int handle_command(void)
@@ -638,7 +731,8 @@ int handle_command(void)
 
     cached_result = cache_lookup(cmd_cache, cmd_id->valuestring);
     if (cached_result) {
-        printf("[CMD: replaying cached result for %s]\n", cmd_id->valuestring);
+        ui_printf("[CMD: replaying cached result for %s]\n",
+                  cmd_id->valuestring);
         ret = http_request("POST", "/cmd/result", cached_result, response,
                            sizeof(response));
         if (ret != HTTP_OK) {
@@ -655,7 +749,7 @@ int handle_command(void)
             GetCurrentDirectory(sizeof(old_workdir), old_workdir);
             if (SetCurrentDirectory(full_workdir)) {
                 changed_dir = 1;
-                printf("[CD: %s]\n", full_workdir);
+                ui_printf("[CD: %s]\n", full_workdir);
             } else {
                 log_error("command", "Could not change directory");
             }
@@ -667,7 +761,7 @@ int handle_command(void)
         strncpy(cmd_copy, command->valuestring, sizeof(cmd_copy) - 1);
         cmd_copy[sizeof(cmd_copy) - 1] = '\0';
         path_to_backslashes(cmd_copy);
-        printf("[CMD: %s]\n", cmd_copy);
+        ui_printf("[CMD: %s]\n", cmd_copy);
 
         cmd_output = malloc(MAX_CMD_OUTPUT);
         if (!cmd_output) {
@@ -683,7 +777,10 @@ int handle_command(void)
         ver = GetVersion();
         major = (DWORD)(LOBYTE(LOWORD(ver)));
 
-        if (major >= 5) {
+        if (g_hidden_exec) {
+            exit_code = execute_command_hidden(cmd_copy, cmd_output,
+                                               MAX_CMD_OUTPUT, major >= 5);
+        } else if (major >= 5) {
             exit_code =
                 execute_command_nt(cmd_copy, cmd_output, MAX_CMD_OUTPUT);
         } else {
@@ -692,11 +789,11 @@ int handle_command(void)
         }
 
         if (cmd_output[0] != '\0') {
-            printf("%s", cmd_output);
+            ui_write(UI_TEXT_INFO, cmd_output);
             {
                 size_t len = strlen(cmd_output);
                 if (len > 0 && cmd_output[len - 1] != '\n') {
-                    printf("\n");
+                    ui_write(UI_TEXT_INFO, "\n");
                 }
             }
         }

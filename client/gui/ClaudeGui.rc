@@ -1,0 +1,178 @@
+//Microsoft Developer Studio generated resource script.
+//
+#include "resource.h"
+
+#define APSTUDIO_READONLY_SYMBOLS
+/////////////////////////////////////////////////////////////////////////////
+//
+// Generated from the TEXTINCLUDE 2 resource.
+//
+#include "afxres.h"
+
+/////////////////////////////////////////////////////////////////////////////
+#undef APSTUDIO_READONLY_SYMBOLS
+
+/////////////////////////////////////////////////////////////////////////////
+// English (U.S.) resources
+
+#if !defined(AFX_RESOURCE_DLL) || defined(AFX_TARG_ENU)
+#ifdef _WIN32
+LANGUAGE LANG_ENGLISH, SUBLANG_ENGLISH_US
+#pragma code_page(1252)
+#endif //_WIN32
+
+#ifdef APSTUDIO_INVOKED
+/////////////////////////////////////////////////////////////////////////////
+//
+// TEXTINCLUDE
+//
+
+1 TEXTINCLUDE DISCARDABLE
+BEGIN
+    "resource.h\0"
+END
+
+2 TEXTINCLUDE DISCARDABLE
+BEGIN
+    "#include ""afxres.h""\r\n"
+    "\0"
+END
+
+3 TEXTINCLUDE DISCARDABLE
+BEGIN
+    "#define _AFX_NO_SPLITTER_RESOURCES\r\n"
+    "#define _AFX_NO_OLE_RESOURCES\r\n"
+    "#define _AFX_NO_TRACKER_RESOURCES\r\n"
+    "#define _AFX_NO_PROPERTY_RESOURCES\r\n"
+    "\r\n"
+    "#if !defined(AFX_RESOURCE_DLL) || defined(AFX_TARG_ENU)\r\n"
+    "#ifdef _WIN32\r\n"
+    "LANGUAGE 9, 1\r\n"
+    "#pragma code_page(1252)\r\n"
+    "#endif //_WIN32\r\n"
+    "#include ""afxres.rc""         // Standard components\r\n"
+    "#endif\r\n"
+    "\0"
+END
+
+#endif    // APSTUDIO_INVOKED
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Icon
+//
+
+// Icon with lowest ID value placed first to ensure application icon
+// remains consistent on all systems.
+IDR_MAINFRAME           ICON    DISCARDABLE     "..\\..\\build\\icons\\client.ico"
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Dialog
+//
+
+// 0x2000 on IDC_OUTPUT is ES_DISABLENOSCROLL (richedit.h): always show the
+// scrollbar
+IDD_CLAUDEGUI_DIALOG DIALOGEX 0, 0, 400, 250
+STYLE DS_CENTER | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_POPUP | WS_VISIBLE |
+    WS_CAPTION | WS_SYSMENU | WS_THICKFRAME
+EXSTYLE WS_EX_APPWINDOW
+CAPTION "ClaudeWin9x"
+FONT 8, "MS Sans Serif"
+BEGIN
+    LTEXT           "&Server:",IDC_LABEL_SERVER,7,9,26,8
+    EDITTEXT        IDC_SERVER_IP,34,7,70,12,ES_AUTOHSCROLL
+    LTEXT           ":",IDC_LABEL_COLON,107,9,4,8
+    EDITTEXT        IDC_SERVER_PORT,113,7,30,12,ES_AUTOHSCROLL | ES_NUMBER
+    PUSHBUTTON      "&Connect",IDC_CONNECT,151,6,50,14
+    CONTROL         "&Auto-approve tools",IDC_AUTO_APPROVE,"Button",
+                    BS_AUTOCHECKBOX | WS_TABSTOP,209,8,80,10
+    CONTROL         "",IDC_OUTPUT,"RICHEDIT",ES_MULTILINE | ES_AUTOVSCROLL |
+                    ES_READONLY | 0x2000 | WS_BORDER |
+                    WS_VSCROLL | WS_TABSTOP,7,27,386,160
+    EDITTEXT        IDC_INPUT,7,193,329,40,ES_MULTILINE | ES_AUTOVSCROLL |
+                    ES_WANTRETURN | WS_VSCROLL
+    PUSHBUTTON      "S&end",IDC_SEND,343,193,50,14
+    PUSHBUTTON      "C&lear",IDC_CLEAR,343,219,50,14
+    LTEXT           "Not connected",IDC_STATUS,7,238,386,8,SS_NOPREFIX
+END
+
+IDD_APPROVAL DIALOG DISCARDABLE  0, 0, 300, 170
+STYLE DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "Tool Approval Required"
+FONT 8, "MS Sans Serif"
+BEGIN
+    LTEXT           "Claude wants to use a tool on this machine:",
+                    IDC_LABEL_TOOL,7,7,286,8
+    LTEXT           "",IDC_TOOL_NAME,7,19,286,8,SS_NOPREFIX
+    EDITTEXT        IDC_TOOL_INPUT,7,31,286,110,ES_MULTILINE |
+                    ES_AUTOVSCROLL | ES_READONLY | WS_VSCROLL
+    PUSHBUTTON      "&Allow",IDOK,183,149,50,14
+    DEFPUSHBUTTON   "&Deny",IDCANCEL,243,149,50,14
+END
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Version
+//
+
+VS_VERSION_INFO VERSIONINFO
+ FILEVERSION 1,0,0,0
+ PRODUCTVERSION 1,0,0,0
+ FILEFLAGSMASK 0x3fL
+#ifdef _DEBUG
+ FILEFLAGS 0x1L
+#else
+ FILEFLAGS 0x0L
+#endif
+ FILEOS 0x4L
+ FILETYPE 0x1L
+ FILESUBTYPE 0x0L
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904b0"
+        BEGIN
+            VALUE "CompanyName", "Ryan Deering\0"
+            VALUE "FileDescription", "GUI client for Claude Code on Windows 9x/NT systems\0"
+            VALUE "FileVersion", "1.0.0.0\0"
+            VALUE "InternalName", "ClaudeWin9xGui\0"
+            VALUE "LegalCopyright", "Ryan Deering\0"
+            VALUE "OriginalFilename", "ClaudeWin9x-Gui.exe\0"
+            VALUE "ProductName", "Claude Code Win9x/NT Client\0"
+            VALUE "ProductVersion", "1.0.0\0"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x409, 1200
+    END
+END
+
+#endif    // English (U.S.) resources
+/////////////////////////////////////////////////////////////////////////////
+
+
+
+#ifndef APSTUDIO_INVOKED
+/////////////////////////////////////////////////////////////////////////////
+//
+// Generated from the TEXTINCLUDE 3 resource.
+//
+#define _AFX_NO_SPLITTER_RESOURCES
+#define _AFX_NO_OLE_RESOURCES
+#define _AFX_NO_TRACKER_RESOURCES
+#define _AFX_NO_PROPERTY_RESOURCES
+
+#if !defined(AFX_RESOURCE_DLL) || defined(AFX_TARG_ENU)
+#ifdef _WIN32
+LANGUAGE 9, 1
+#pragma code_page(1252)
+#endif //_WIN32
+#include "afxres.rc"         // Standard components
+#endif
+
+/////////////////////////////////////////////////////////////////////////////
+#endif    // not APSTUDIO_INVOKED

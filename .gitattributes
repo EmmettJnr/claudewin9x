@@ -1,0 +1,3 @@
+*.dsp -text
+*.dsw -text
+Makefile.vc6 -text

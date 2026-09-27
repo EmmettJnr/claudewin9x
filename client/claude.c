@@ -11,25 +11,21 @@
 #include <conio.h>
 #include <process.h>
 
-ClientState g_state = {.server_ip = "192.168.2.1",
-                       .server_port = PORT_API,
-                       .download_port = PORT_FILE_DOWNLOAD,
-                       .upload_port = PORT_FILE_UPLOAD,
-                       .session_id = "",
-                       .connected = 0,
-                       .running = 1,
-                       .logfile = NULL,
-                       .logpath = "claude.log",
-                       .last_heartbeat = 0,
-                       .poll_thread = NULL,
-                       .has_pending_output = 0,
-                       .session_stopped = 0,
-                       .has_pending_approval = 0,
-                       .approval_in_progress = 0,
-                       .approval_id = "",
-                       .approval_tool_name = "",
-                       .approval_tool_input = "",
-                       .skip_permissions = 0};
+/*
+ * Positional (C89) initializer so it builds with VC6, which lacks designated
+ * initializers. Must follow ClientState field order; remaining fields are 0.
+ */
+ClientState g_state = {
+    "192.168.2.1",      /* server_ip */
+    PORT_API,           /* server_port */
+    PORT_FILE_DOWNLOAD, /* download_port */
+    PORT_FILE_UPLOAD,   /* upload_port */
+    "",                 /* session_id */
+    0,                  /* connected */
+    1,                  /* running */
+    NULL,               /* logfile */
+    "claude.log"        /* logpath */
+};
 
 static unsigned __stdcall poll_thread_func(void *param)
 {

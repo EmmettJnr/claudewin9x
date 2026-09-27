@@ -1,0 +1,26 @@
+# Example systemd unit for running the server on Linux.
+#
+# Adjust User and the paths below, then:
+#   sudo cp claudewin9x.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now claudewin9x
+#
+# The service user must have Claude Code installed and logged in
+# (run `claude` once as that user). The server looks for the CLI in
+# ~/.local/bin/claude of the service user.
+
+[Unit]
+Description=ClaudeWin9x bridge server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=claudewin9x
+WorkingDirectory=/opt/claudewin9x
+ExecStart=/opt/claudewin9x/ClaudeWin9x-Server
+Environment=DOTNET_NOLOGO=1
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

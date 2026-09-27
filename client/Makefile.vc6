@@ -1,0 +1,44 @@
+# Build with Microsoft Visual C++ 6.0 (NMAKE).
+#
+# From a command prompt, run VCVARS32.BAT (in VC98\BIN) and then:
+#   nmake /f Makefile.vc6
+#   nmake /f Makefile.vc6 clean
+#
+# /MT links the static multithreaded CRT (needed for _beginthreadex) so the
+# exe has no MSVCRT.DLL dependency. Runs on Windows 95 OSR2 and above.
+
+CC = cl
+RC = rc
+LINK = link
+
+CFLAGS = /nologo /W3 /O2 /MT /D WIN32 /D NDEBUG /D _CONSOLE \
+         /D CJSON_HIDE_SYMBOLS
+LDFLAGS = /nologo /subsystem:console /release
+LIBS = ws2_32.lib kernel32.lib user32.lib
+
+TARGET = ClaudeWin9x-Client.exe
+RESOURCE_RES = ClaudeWin9xClient.res
+
+OBJECTS = claude.obj commands.obj handlers.obj http.obj session.obj \
+          transfer.obj util.obj cJSON.obj
+
+all: $(TARGET)
+
+.c.obj:
+	$(CC) $(CFLAGS) /c $<
+
+cJSON.obj: third_party\cJSON.c third_party\cJSON.h
+	$(CC) $(CFLAGS) /c /FocJSON.obj third_party\cJSON.c
+
+$(OBJECTS): claude.h third_party\cJSON.h
+
+$(RESOURCE_RES): ClaudeWin9xClient.rc
+	$(RC) /fo$(RESOURCE_RES) ClaudeWin9xClient.rc
+
+$(TARGET): $(OBJECTS) $(RESOURCE_RES)
+	$(LINK) $(LDFLAGS) /out:$(TARGET) $(OBJECTS) $(RESOURCE_RES) $(LIBS)
+
+clean:
+	-del *.obj
+	-del $(RESOURCE_RES)
+	-del $(TARGET)

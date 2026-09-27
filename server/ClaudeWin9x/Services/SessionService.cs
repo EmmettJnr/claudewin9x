@@ -18,7 +18,10 @@ public class SessionService(
 
     public (string SessionId, string Status) StartSession(string? workingDirectory, string? windowsVersion)
     {
-        var workingDir = workingDirectory ?? Path.GetTempPath();
+        // Client paths (e.g. a Windows path from the client) usually do not exist on the server host
+        var workingDir = workingDirectory != null && Directory.Exists(workingDirectory)
+            ? workingDirectory
+            : Path.GetTempPath();
         var winVersion = windowsVersion ?? "Unknown Windows";
 
         logger.LogInformation("Client connecting: {WindowsVersion}", winVersion);

@@ -406,6 +406,7 @@ int handle_fileop(void)
     char *result_str;
     const char *op;
     const char *cached_result;
+    HttpResult ret;
 
     if (http_request("GET", "/fs/poll", NULL, response, sizeof(response)) !=
         HTTP_OK) {
@@ -439,10 +440,10 @@ int handle_fileop(void)
     cached_result = cache_lookup(fs_cache, op_id->valuestring);
     if (cached_result) {
         printf("[FS: replaying cached result for %s]\n", op_id->valuestring);
-        HttpResult cached_ret = http_request(
-            "POST", "/fs/result", cached_result, response, sizeof(response));
-        if (cached_ret != HTTP_OK) {
-            log_error("handle_fileop", http_error_string(cached_ret));
+        ret = http_request("POST", "/fs/result", cached_result, response,
+                           sizeof(response));
+        if (ret != HTTP_OK) {
+            log_error("handle_fileop", http_error_string(ret));
         }
         cJSON_Delete(json);
         return 1;
@@ -478,10 +479,10 @@ int handle_fileop(void)
     result_str = cJSON_PrintUnformatted(result);
     if (result_str) {
         cache_store(fs_cache, &fs_cache_index, op_id->valuestring, result_str);
-        HttpResult post_ret = http_request("POST", "/fs/result", result_str,
-                                           response, sizeof(response));
-        if (post_ret != HTTP_OK) {
-            log_error("handle_fileop", http_error_string(post_ret));
+        ret = http_request("POST", "/fs/result", result_str, response,
+                           sizeof(response));
+        if (ret != HTTP_OK) {
+            log_error("handle_fileop", http_error_string(ret));
         }
         free(result_str);
     }
@@ -606,6 +607,7 @@ int handle_command(void)
     int changed_dir = 0;
     DWORD ver;
     DWORD major;
+    HttpResult ret;
 
     if (http_request("GET", "/cmd/poll", NULL, response, sizeof(response)) !=
         HTTP_OK) {
@@ -637,10 +639,10 @@ int handle_command(void)
     cached_result = cache_lookup(cmd_cache, cmd_id->valuestring);
     if (cached_result) {
         printf("[CMD: replaying cached result for %s]\n", cmd_id->valuestring);
-        HttpResult cached_ret = http_request(
-            "POST", "/cmd/result", cached_result, response, sizeof(response));
-        if (cached_ret != HTTP_OK) {
-            log_error("handle_command", http_error_string(cached_ret));
+        ret = http_request("POST", "/cmd/result", cached_result, response,
+                           sizeof(response));
+        if (ret != HTTP_OK) {
+            log_error("handle_command", http_error_string(ret));
         }
         cJSON_Delete(json);
         return 1;
@@ -714,10 +716,10 @@ int handle_command(void)
     if (result_str) {
         cache_store(cmd_cache, &cmd_cache_index, cmd_id->valuestring,
                     result_str);
-        HttpResult post_ret = http_request("POST", "/cmd/result", result_str,
-                                           response, sizeof(response));
-        if (post_ret != HTTP_OK) {
-            log_error("handle_command", http_error_string(post_ret));
+        ret = http_request("POST", "/cmd/result", result_str, response,
+                           sizeof(response));
+        if (ret != HTTP_OK) {
+            log_error("handle_command", http_error_string(ret));
         }
         free(result_str);
     }

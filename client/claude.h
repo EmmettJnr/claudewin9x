@@ -12,6 +12,15 @@
 #include <windows.h>
 #include "third_party/cJSON.h"
 
+/*
+ * Visual C++ before 2015 (e.g. VC6) has no C99 snprintf, only _snprintf,
+ * which does not null-terminate on truncation. Use a wrapper that does.
+ */
+#if defined(_MSC_VER) && _MSC_VER < 1900
+int compat_snprintf(char *buf, size_t size, const char *fmt, ...);
+#define snprintf compat_snprintf
+#endif
+
 #define BUFFER_SIZE 32768
 #define MAX_INPUT 1024
 #define MAX_PATH_LEN 512

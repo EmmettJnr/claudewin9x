@@ -186,6 +186,7 @@ void session_connect(const char *working_dir)
     const cJSON *error_item;
     char *body;
     char win_version[128];
+    HttpResult ret;
 
     if (g_state.session_id[0]) {
         printf("[Already connected. Use /disconnect first]\n");
@@ -216,8 +217,7 @@ void session_connect(const char *working_dir)
         return;
     }
 
-    HttpResult ret =
-        http_request("POST", "/start", body, response, sizeof(response));
+    ret = http_request("POST", "/start", body, response, sizeof(response));
     free(body);
 
     if (ret != HTTP_OK) {

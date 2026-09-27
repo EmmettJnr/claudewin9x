@@ -110,6 +110,19 @@ wmake
 
 Builds a standalone executable targeting Win32, 386 and above. Minimum supported OS is Windows 95 OSR 2. Build using [Open Watcom V2](https://github.com/open-watcom/open-watcom-v2/releases/tag/Current-build).
 
+#### Visual C++ 6.0
+
+The client also builds with Microsoft Visual C++ 6.0, either from the IDE or the command line:
+
+- **IDE:** open `client\ClaudeWin9xClient.dsw` and build. Output goes to `Release\` or `Debug\`.
+- **Command line:** run `VCVARS32.BAT` (in `VC98\Bin`), then:
+  ```
+  cd client
+  nmake /f Makefile.vc6
+  ```
+
+Both link the static multithreaded CRT (`/MT`), so the exe only depends on `KERNEL32.DLL` and `WS2_32.DLL`. The `.dsp`/`.dsw`/`Makefile.vc6` files must keep CRLF line endings for VC6 to load them (see `.gitattributes`).
+
 ### Server
 
 ```bash
@@ -119,6 +132,27 @@ dotnet publish -r win-x64       # Or linux-x64, osx-arm64, etc
 ```
 
 Published as a native AOT binary - there's no runtime required (woo!). Requires .NET 10 SDK and Visual Studio Build Tools (Desktop C++ workload) to build on Windows.
+
+#### Running on a locked-down Linux VM
+
+The server runs Claude Code with `--dangerously-skip-permissions` on the server host, the API key is a fixed value in the source, and the file transfer ports are unauthenticated. Anything that can reach ports 5000-5002 can effectively drive Claude on the server, so running it in a dedicated VM with a firewall is recommended.
+
+1. Install the .NET 10 SDK and [Claude Code](https://docs.anthropic.com/en/docs/claude-code), then run `claude` once as the service user to log in.
+2. Build. On low-memory VMs a framework-dependent build avoids the AOT compiler:
+   ```bash
+   cd server/ClaudeWin9x
+   dotnet publish -c Release -r linux-x64 --self-contained false -p:PublishAot=false -o /opt/claudewin9x
+   ```
+3. Install `server/deploy/claudewin9x.service` as a systemd unit (edit `User` and paths first).
+4. Only allow the retro client to reach the server ports, e.g. with ufw:
+   ```bash
+   sudo ufw default deny incoming
+   sudo ufw allow OpenSSH
+   sudo ufw allow from <client-ip> to any port 5000:5002 proto tcp
+   sudo ufw enable
+   ```
+
+The path given to `/connect` is sent to the server as Claude's working directory. If it doesn't exist on the server (e.g. a Windows path when the server runs on Linux), the server falls back to its temp directory.
 
 ## Third Party
 

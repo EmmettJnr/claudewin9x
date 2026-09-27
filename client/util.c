@@ -3,8 +3,36 @@
  */
 
 #include "util.h"
+#include <stdarg.h>
 
 static void log_output(const char *text);
+
+#if defined(_MSC_VER) && _MSC_VER < 1900
+/*
+ * Returns -1 on truncation (C99 would return the needed length); callers
+ * treat both "< 0" and ">= size" as overflow.
+ */
+int compat_snprintf(char *buf, size_t size, const char *fmt, ...)
+{
+    va_list args;
+    int len;
+
+    if (size == 0) {
+        return -1;
+    }
+
+    va_start(args, fmt);
+    len = _vsnprintf(buf, size, fmt, args);
+    va_end(args);
+
+    if (len < 0 || (size_t)len >= size) {
+        buf[size - 1] = '\0';
+        return -1;
+    }
+
+    return len;
+}
+#endif
 
 static int is_switch_char(char c)
 {

@@ -43,11 +43,11 @@ util.obj: ../util.c ../util.h ../claude.h
 cJSON.obj: ../third_party/cJSON.c ../third_party/cJSON.h
 	$(CC) $(CFLAGS) -fo=cJSON.obj ../third_party/cJSON.c
 
-$(RESOURCE_RES): $(RESOURCE) resource.h ../../build/icons/client.ico
+$(RESOURCE_RES): $(RESOURCE) resource.h ../../build/icons/client.ico ../../build/icons/tray_*.ico
 	$(RC) -q -r -bt=nt -fo=$@ $(RESOURCE)
 
 $(TARGET): $(OBJECTS) $(RESOURCE_RES)
-	$(LINKER) system nt_win name $@ file {$(OBJECTS)} library ws2_32 option resource=$(RESOURCE_RES)
+	$(LINKER) system nt_win name $@ file {$(OBJECTS)} library ws2_32,shell32 option resource=$(RESOURCE_RES)
 
 clean: .SYMBOLIC
 	-rm -f *.obj $(RESOURCE_RES) $(TARGET)

@@ -30,10 +30,17 @@
  *                 which the receiver must release with rc_free_text().
  * WM_RC_APPROVAL: an approval is waiting; call rc_take_approval().
  * WM_RC_STATUS:   wParam = RC_STATUS_*.
+ * WM_RC_ACTIVITY: wParam = RC_ACTIVITY_*.
  */
 #define WM_RC_TEXT (WM_APP + 1)
 #define WM_RC_APPROVAL (WM_APP + 2)
 #define WM_RC_STATUS (WM_APP + 3)
+#define WM_RC_ACTIVITY (WM_APP + 4)
+
+/* Same values as HANDLER_ACTIVITY_* in handlers.h */
+#define RC_ACTIVITY_DONE 0
+#define RC_ACTIVITY_WORKING 1
+#define RC_ACTIVITY_SENDING 2
 
 /* Loads ini_path ([server] section) and starts the poll thread. 0 = ok. */
 int rc_init(HWND notify, const char *ini_path);

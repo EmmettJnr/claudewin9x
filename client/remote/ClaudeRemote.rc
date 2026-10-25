@@ -7,9 +7,28 @@
 
 IDR_MAINFRAME ICON "../../build/icons/client.ico"
 
+/* Two dial-up style monitors (build/icons/make_tray_icons.py) */
+IDI_TRAY_OFF ICON "../../build/icons/tray_off.ico"
+IDI_TRAY_IDLE ICON "../../build/icons/tray_idle.ico"
+IDI_TRAY_LEFT ICON "../../build/icons/tray_left.ico"
+IDI_TRAY_RIGHT ICON "../../build/icons/tray_right.ico"
+IDI_TRAY_BOTH ICON "../../build/icons/tray_both.ico"
+
+IDR_TRAYMENU MENU
+BEGIN
+    POPUP "Tray"
+    BEGIN
+        MENUITEM "&Open ClaudeWin9x Remote",    IDM_SHOW
+        MENUITEM SEPARATOR
+        MENUITEM "&Connect",                    IDM_CONNECT
+        MENUITEM "&Allow anything",             IDM_ALLOW_ALL
+        MENUITEM SEPARATOR
+        MENUITEM "E&xit",                       IDM_EXIT
+    END
+END
+
 IDD_REMOTE DIALOG 0, 0, 300, 196
-STYLE DS_CENTER | WS_MINIMIZEBOX | WS_POPUP | WS_VISIBLE | WS_CAPTION |
-    WS_SYSMENU
+STYLE DS_CENTER | WS_MINIMIZEBOX | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "ClaudeWin9x Remote"
 FONT 8, "MS Sans Serif"
 BEGIN

@@ -5,7 +5,8 @@
 #   nmake /f Makefile.vc6 clean
 #
 # Plain Win32, no MFC. /MT links the static multithreaded CRT, so the exe
-# only needs KERNEL32, USER32, GDI32 and WS2_32 (Windows 95 OSR2 and up).
+# only needs KERNEL32, USER32, GDI32, SHELL32 and WS2_32 (Windows 95 OSR2
+# and up).
 
 CC = cl
 RC = rc
@@ -14,7 +15,7 @@ LINK = link
 CFLAGS = /nologo /W3 /O2 /MT /D WIN32 /D NDEBUG /D _WINDOWS \
          /D CJSON_HIDE_SYMBOLS
 LDFLAGS = /nologo /subsystem:windows /release
-LIBS = ws2_32.lib kernel32.lib user32.lib gdi32.lib
+LIBS = ws2_32.lib kernel32.lib user32.lib gdi32.lib shell32.lib
 
 TARGET = ClaudeWin9x-Remote.exe
 RESOURCE_RES = ClaudeRemote.res
@@ -45,7 +46,8 @@ util.obj: ..\util.c ..\util.h ..\claude.h
 cJSON.obj: ..\third_party\cJSON.c ..\third_party\cJSON.h
 	$(CC) $(CFLAGS) /c ..\third_party\cJSON.c
 
-$(RESOURCE_RES): ClaudeRemote.rc resource.h ..\..\build\icons\client.ico
+$(RESOURCE_RES): ClaudeRemote.rc resource.h ..\..\build\icons\client.ico \
+                 ..\..\build\icons\tray_off.ico
 	$(RC) /fo$(RESOURCE_RES) ClaudeRemote.rc
 
 $(TARGET): $(OBJECTS) $(RESOURCE_RES)

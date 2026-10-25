@@ -61,6 +61,11 @@ static void post_text(int kind, const char *text)
     }
 }
 
+static void post_activity(int activity)
+{
+    PostMessage(g_notify, WM_RC_ACTIVITY, (WPARAM)activity, 0);
+}
+
 static void set_status(int status)
 {
     if (status != g_status) {
@@ -283,6 +288,7 @@ int rc_init(HWND notify, const char *ini_path)
     g_ui_thread = GetCurrentThreadId();
     ui_set_output_hook(post_text);
     handlers_set_hidden_exec(1);
+    handlers_set_activity_hook(post_activity);
 
     InitializeCriticalSection(&g_state.output_lock);
 

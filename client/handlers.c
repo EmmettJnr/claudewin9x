@@ -22,6 +22,31 @@ static int cmd_cache_index = 0;
 /* Run commands in a hidden window (see execute_command_hidden) */
 static int g_hidden_exec = 0;
 
+static HandlerActivityHook g_activity_hook = NULL;
+static int g_activity_reported = 0;
+
+static void report_activity(int activity)
+{
+    if (g_activity_hook) {
+        g_activity_hook(activity);
+        g_activity_reported = activity != HANDLER_ACTIVITY_DONE;
+    }
+}
+
+/* Every operation that reported activity ends with exactly one DONE */
+static int finish_activity(int handled)
+{
+    if (g_activity_reported) {
+        report_activity(HANDLER_ACTIVITY_DONE);
+    }
+    return handled;
+}
+
+void handlers_set_activity_hook(HandlerActivityHook hook)
+{
+    g_activity_hook = hook;
+}
+
 /*
  * COMMAND.COM ignores redirection of a batch file ("X.BAT > file" prints to
  * the screen), so run the command in a second COMMAND.COM: the redirection
@@ -469,7 +494,20 @@ static void handle_mkdir_op(const char *full_path, cJSON *result)
     }
 }
 
+static int fileop_impl(void);
+static int command_impl(void);
+
 int handle_fileop(void)
+{
+    return finish_activity(fileop_impl());
+}
+
+int handle_command(void)
+{
+    return finish_activity(command_impl());
+}
+
+static int fileop_impl(void)
 {
     static char response[BUFFER_SIZE];
     char full_path[MAX_PATH_LEN];
@@ -514,6 +552,8 @@ int handle_fileop(void)
         cJSON_Delete(json);
         return 0;
     }
+
+    report_activity(HANDLER_ACTIVITY_WORKING);
 
     cached_result = cache_lookup(fs_cache, op_id->valuestring);
     if (cached_result) {
@@ -568,6 +608,7 @@ int handle_fileop(void)
     result_str = cJSON_PrintUnformatted(result);
     if (result_str) {
         cache_store(fs_cache, &fs_cache_index, op_id->valuestring, result_str);
+        report_activity(HANDLER_ACTIVITY_SENDING);
         ret = http_request("POST", "/fs/result", result_str, response,
                            sizeof(response));
         if (ret != HTTP_OK) {
@@ -766,7 +807,7 @@ void handlers_set_hidden_exec(int enabled)
     g_hidden_exec = enabled;
 }
 
-int handle_command(void)
+static int command_impl(void)
 {
     static char response[BUFFER_SIZE];
     char *cmd_output;
@@ -811,6 +852,8 @@ int handle_command(void)
         cJSON_Delete(json);
         return 0;
     }
+
+    report_activity(HANDLER_ACTIVITY_WORKING);
 
     cached_result = cache_lookup(cmd_cache, cmd_id->valuestring);
     if (cached_result) {
@@ -897,6 +940,7 @@ int handle_command(void)
     if (result_str) {
         cache_store(cmd_cache, &cmd_cache_index, cmd_id->valuestring,
                     result_str);
+        report_activity(HANDLER_ACTIVITY_SENDING);
         ret = http_request("POST", "/cmd/result", result_str, response,
                            sizeof(response));
         if (ret != HTTP_OK) {

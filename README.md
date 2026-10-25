@@ -181,6 +181,31 @@ claude mcp add --transport http --scope user win98 http://<server>:5003/mcp \
 
 Tools: `status`, `run_command`, `list_directory`, `read_file`, `write_file` (text is converted to CRLF and Windows-1252; `encoding: base64` for binary) and `make_directory`. File contents go over the TCP transfer ports, so they are byte-exact and not limited by the client's 32 KB HTTP buffer. Paths can use any drive letter; without one they are relative to `C:\`.
 
+#### w98sh: a DOS prompt from a modern terminal
+
+`tools/w98sh.py` uses the same remote endpoint to give you a DOS prompt on the retro machine, a bit like ssh. It needs only Python 3:
+
+```
+$ w98sh
+Connected to RETROPC (Windows 98). Type help for w98sh commands.
+C:\> cd projects\game
+C:\Projects\GAME> nmake
+C:\Projects\GAME> get GAME.EXE
+C:\Projects\GAME> edit MAIN.C        (opens in $EDITOR here, saves it back)
+```
+
+Directories and drives are tracked like DOS (`cd`, `cd..`, `D:`), Tab completes retro file names, and history (up arrow, Ctrl-R) is kept in `~/.local/state/w98sh_history`. `get`, `put` and `edit` move files; `lcd` and `!command` work on the local machine. `w98sh dir C:\` runs a single command and exits (`-d DIR` sets the directory).
+
+Configure it in `~/.config/w98sh.ini` (or `W98SH_URL` / `W98SH_TOKEN`):
+
+```ini
+[w98sh]
+url = http://<server>:5003/mcp
+token = <remote_token>
+```
+
+It is not a real console: programs get no keyboard input (no EDIT, games or prompts), output appears when a command finishes, and Ctrl-C only stops waiting.
+
 ### Server
 
 ```bash

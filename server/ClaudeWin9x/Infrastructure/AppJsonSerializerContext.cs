@@ -11,6 +11,8 @@ namespace ClaudeWin9xServer.Infrastructure;
 /// See: https://learn.microsoft.com/en-us/dotnet/standard/serialization/system-text-json/source-generation
 /// </summary>
 [JsonSerializable(typeof(StartRequest))]
+[JsonSerializable(typeof(RemoteConnectRequest))]
+[JsonSerializable(typeof(RemoteConnectResponse))]
 [JsonSerializable(typeof(InputRequest))]
 [JsonSerializable(typeof(SessionIdRequest))]
 [JsonSerializable(typeof(CommandRequest))]

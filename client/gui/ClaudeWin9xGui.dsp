@@ -124,6 +124,10 @@ SOURCE=..\http.c
 # End Source File
 # Begin Source File
 
+SOURCE=..\transfer.c
+# End Source File
+# Begin Source File
+
 SOURCE=..\util.c
 # End Source File
 # Begin Source File

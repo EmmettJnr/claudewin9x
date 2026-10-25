@@ -16,8 +16,10 @@ public class CommandService(
 {
     private readonly TimeSpan _timeout = timeout ?? TimeSpan.FromSeconds(120);
 
-    public async Task<CommandResult?> QueueCommandAsync(string command, string? workingDirectory, string? sessionId = null, CancellationToken cancellationToken = default)
+    public async Task<CommandResult?> QueueCommandAsync(string command, string? workingDirectory, string? sessionId = null, TimeSpan? timeout = null, CancellationToken cancellationToken = default)
     {
+        var waitTimeout = timeout ?? _timeout;
+
         if (sessionId != null)
         {
             var approved = await approvalService.RequestApprovalAsync(
@@ -69,7 +71,7 @@ public class CommandService(
 
         try
         {
-            var result = await tcs.Task.WaitAsync(_timeout, cancellationToken);
+            var result = await tcs.Task.WaitAsync(waitTimeout, cancellationToken);
             logger.LogInformation("Command {CommandId} completed: exit={ExitCode}, stdout={StdoutLength} chars",
                 cmdId, result.ExitCode, result.Stdout?.Length ?? 0);
             return result;

@@ -16,6 +16,9 @@ public class FileTransferService(
 
     private readonly string _fileTransferRoot = fileTransferRoot ?? Directory.GetCurrentDirectory();
     private readonly long _maxFileSize = maxFileSizeBytes ?? DefaultMaxFileSize;
+    /// <summary>Directory uploads are saved to and downloads are served from.</summary>
+    public string Root => _fileTransferRoot;
+
     private TcpListener? _downloadServer;
     private TcpListener? _uploadServer;
     private CancellationTokenSource? _cts;

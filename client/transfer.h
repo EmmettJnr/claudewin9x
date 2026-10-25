@@ -11,4 +11,7 @@ int transfer_download(const char *remote_path, const char *local_path);
 
 int transfer_upload(const char *local_path, const char *remote_path);
 
+/* Reason the last transfer failed */
+const char *transfer_last_error(void);
+
 #endif /* TRANSFER_H */

@@ -1,18 +1,30 @@
 using System.Collections.Concurrent;
 using System.Diagnostics.CodeAnalysis;
+using System.Text;
 using System.Text.Json;
 using ClaudeWin9xServer.Endpoints;
 using ClaudeWin9xServer.Infrastructure;
 using ClaudeWin9xServer.Models.Requests;
 using ClaudeWin9xServer.Models.Responses;
+using ClaudeWin9xServer.Remote;
 using ClaudeWin9xServer.Services;
 using ClaudeWin9xServer.Services.Interfaces;
 
 IniConfig.Load();
 
+// Windows-1252 for text files on the retro machine
+Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+
 var builder = WebApplication.CreateSlimBuilder(args);
 
-builder.WebHost.UseUrls($"http://0.0.0.0:{IniConfig.ApiPort}");
+if (IniConfig.RemoteEnabled)
+{
+    builder.WebHost.UseUrls($"http://0.0.0.0:{IniConfig.ApiPort}", $"http://0.0.0.0:{IniConfig.RemotePort}");
+}
+else
+{
+    builder.WebHost.UseUrls($"http://0.0.0.0:{IniConfig.ApiPort}");
+}
 
 builder.Services.ConfigureHttpJsonOptions(options =>
 {
@@ -71,6 +83,20 @@ builder.Services.AddSingleton(sp => new FileTransferService(
 ));
 builder.Services.AddHostedService(sp => sp.GetRequiredService<FileTransferService>());
 
+builder.Services.AddSingleton(sp => new RemoteClientService(sp.GetRequiredService<ILogger<RemoteClientService>>()));
+builder.Services.AddSingleton(sp => new RemoteTools(
+    sp.GetRequiredService<RemoteClientService>(),
+    sp.GetRequiredService<ICommandService>(),
+    sp.GetRequiredService<IFileSystemService>(),
+    sp.GetRequiredService<IApprovalService>(),
+    sp.GetRequiredService<FileTransferService>(),
+    sp.GetRequiredService<ILogger<RemoteTools>>()
+));
+builder.Services.AddSingleton(sp => new McpEndpoint(
+    sp.GetRequiredService<RemoteTools>(),
+    sp.GetRequiredService<ILogger<McpEndpoint>>()
+));
+
 var app = builder.Build();
 
 // Disable chunked transfer encoding for compatibility
@@ -80,8 +106,30 @@ app.Use(async (context, next) =>
     await next();
 });
 
+// The remote port only serves /mcp, with its own token; the retro clients' fixed key does not work there
 app.Use(async (context, next) =>
 {
+    var onRemotePort = IniConfig.RemoteEnabled && context.Connection.LocalPort == IniConfig.RemotePort;
+    var isMcp = context.Request.Path.StartsWithSegments("/mcp");
+
+    if (onRemotePort != isMcp)
+    {
+        context.Response.StatusCode = 404;
+        return;
+    }
+
+    if (onRemotePort)
+    {
+        if (!McpEndpoint.IsAuthorized(context))
+        {
+            context.Response.StatusCode = 401;
+            context.Response.Headers.WWWAuthenticate = "Bearer";
+            return;
+        }
+        await next();
+        return;
+    }
+
     var providedKey = context.Request.Headers["X-API-Key"].FirstOrDefault();
     if (providedKey != IniConfig.ApiKey)
     {
@@ -98,6 +146,12 @@ static void ConfigureEndpoints(WebApplication app) => app.MapEndpoints();
 
 ConfigureEndpoints(app);
 
+if (IniConfig.RemoteEnabled)
+{
+    var mcp = app.Services.GetRequiredService<McpEndpoint>();
+    app.Map("/mcp", (RequestDelegate)mcp.HandleAsync);
+}
+
 Console.WriteLine("===========================================");
 Console.WriteLine("  ClaudeWin9x Server");
 Console.WriteLine("  Written by Ryan Deering (github.com/ryandeering)");
@@ -110,6 +164,14 @@ Console.WriteLine($"  api_port:         {IniConfig.ApiPort}");
 Console.WriteLine($"  download_port:    {IniConfig.DownloadPort}");
 Console.WriteLine($"  upload_port:      {IniConfig.UploadPort}");
 Console.WriteLine($"  temp_dir:         {Path.GetTempPath()}");
+if (IniConfig.RemoteEnabled)
+{
+    Console.WriteLine($"  remote_port:      {IniConfig.RemotePort} (MCP at http://<host>:{IniConfig.RemotePort}/mcp)");
+}
+else if (IniConfig.RemotePort != 0)
+{
+    Console.WriteLine($"  remote_port:      {IniConfig.RemotePort} DISABLED: remote_token must be at least {IniConfig.MinRemoteTokenLength} characters");
+}
 Console.WriteLine();
 
 Console.WriteLine("Note: Claude CLI runs with --dangerously-skip-permissions.");
@@ -121,6 +183,7 @@ Console.WriteLine("  Claude Code: /start, /input, /output, /stop, /sessions, /he
 Console.WriteLine("  Commands:    /cmd/queue, /cmd/poll, /cmd/result, /cmd/status");
 Console.WriteLine("  Filesystem:  /fs/list, /fs/read, /fs/write, /fs/poll, /fs/result");
 Console.WriteLine("  Approvals:   /approval/poll, /approval/respond");
+Console.WriteLine("  Remote:      /remote/connect, /remote/heartbeat, /remote/disconnect");
 Console.WriteLine();
 
 app.Run();

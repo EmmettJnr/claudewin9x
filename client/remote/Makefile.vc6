@@ -1,0 +1,57 @@
+# Build the remote control client with Microsoft Visual C++ 6.0 (NMAKE).
+#
+# From a command prompt, run VCVARS32.BAT (in VC98\BIN) and then:
+#   nmake /f Makefile.vc6
+#   nmake /f Makefile.vc6 clean
+#
+# Plain Win32, no MFC. /MT links the static multithreaded CRT, so the exe
+# only needs KERNEL32, USER32, GDI32 and WS2_32 (Windows 95 OSR2 and up).
+
+CC = cl
+RC = rc
+LINK = link
+
+CFLAGS = /nologo /W3 /O2 /MT /D WIN32 /D NDEBUG /D _WINDOWS \
+         /D CJSON_HIDE_SYMBOLS
+LDFLAGS = /nologo /subsystem:windows /release
+LIBS = ws2_32.lib kernel32.lib user32.lib gdi32.lib
+
+TARGET = ClaudeWin9x-Remote.exe
+RESOURCE_RES = ClaudeRemote.res
+
+OBJECTS = remote.obj remote_core.obj handlers.obj http.obj transfer.obj \
+          util.obj cJSON.obj
+
+all: $(TARGET)
+
+remote.obj: remote.c remote_core.h resource.h
+	$(CC) $(CFLAGS) /c remote.c
+
+remote_core.obj: remote_core.c remote_core.h ..\claude.h ..\handlers.h ..\http.h ..\util.h
+	$(CC) $(CFLAGS) /c remote_core.c
+
+handlers.obj: ..\handlers.c ..\handlers.h ..\claude.h ..\util.h ..\transfer.h
+	$(CC) $(CFLAGS) /c ..\handlers.c
+
+http.obj: ..\http.c ..\http.h ..\claude.h
+	$(CC) $(CFLAGS) /c ..\http.c
+
+transfer.obj: ..\transfer.c ..\transfer.h ..\claude.h ..\util.h
+	$(CC) $(CFLAGS) /c ..\transfer.c
+
+util.obj: ..\util.c ..\util.h ..\claude.h
+	$(CC) $(CFLAGS) /c ..\util.c
+
+cJSON.obj: ..\third_party\cJSON.c ..\third_party\cJSON.h
+	$(CC) $(CFLAGS) /c ..\third_party\cJSON.c
+
+$(RESOURCE_RES): ClaudeRemote.rc resource.h ..\..\build\icons\client.ico
+	$(RC) /fo$(RESOURCE_RES) ClaudeRemote.rc
+
+$(TARGET): $(OBJECTS) $(RESOURCE_RES)
+	$(LINK) $(LDFLAGS) /out:$(TARGET) $(OBJECTS) $(RESOURCE_RES) $(LIBS)
+
+clean:
+	-del *.obj
+	-del $(RESOURCE_RES)
+	-del $(TARGET)

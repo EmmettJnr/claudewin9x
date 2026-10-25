@@ -142,6 +142,45 @@ nmake /f Makefile.vc6
 
 MFC and the CRT are linked statically, so it runs without `MFC42.DLL` or `MSVCRT.DLL`.
 
+#### Remote control client
+
+`client\remote` contains `ClaudeWin9x-Remote.exe`, which flips things around: instead of chatting with Claude on the retro machine, you run a normal Claude Code session on a modern computer and it drives the retro machine through the server.
+
+```
+┌──────────────────┐  MCP over HTTP  ┌──────────┐  HTTP/TCP (polled)  ┌────────────────────┐
+│ Claude Code      │ ──────────────► │  Server  │ ◄────────────────── │ ClaudeWin9x-Remote │
+│ (modern machine) │  :5003, token   │          │  :5000-5002         │ (Win9x/NT)         │
+└──────────────────┘                 └──────────┘                     └────────────────────┘
+```
+
+The client is a small window: server address, **Connect**, an **Allow anything** checkbox, a status line and an activity log. With Allow anything off, every command and file write pops up an Allow/Deny dialog on the retro machine (Deny is the default). It reconnects by itself if the server restarts. In a `[remote]` section of `client.ini`, `auto_connect=true` connects at startup and `allow_all=true` starts with Allow anything on (for this client only, unlike `skip_permissions`).
+
+It is plain Win32 C (no MFC), reads the same `client.ini`, and builds with Visual C++ 6.0 or Open Watcom (including Open Watcom V2 on a Linux host):
+
+```
+cd client\remote
+nmake /f Makefile.vc6       (VC6, after VCVARS32.BAT)
+wmake                       (Open Watcom)
+```
+
+On the server, enable the remote API in `server.ini` with its own port and a long random token:
+
+```ini
+remote_port = 5003
+remote_token = <e.g. output of: openssl rand -hex 24>
+```
+
+Only `/mcp` is served on that port, and only with `Authorization: Bearer <token>`; the retro clients' fixed key does not work there. Allow only the modern machine to reach it (`ufw allow from <modern-ip> to any port 5003 proto tcp`). Optional notes for Claude about your setup (installed tools, shares) go in `remote_instructions.txt` next to the server executable.
+
+Then on the modern machine:
+
+```bash
+claude mcp add --transport http --scope user win98 http://<server>:5003/mcp \
+  --header "Authorization: Bearer <token>"
+```
+
+Tools: `status`, `run_command`, `list_directory`, `read_file`, `write_file` (text is converted to CRLF and Windows-1252; `encoding: base64` for binary) and `make_directory`. File contents go over the TCP transfer ports, so they are byte-exact and not limited by the client's 32 KB HTTP buffer. Paths can use any drive letter; without one they are relative to `C:\`.
+
 ### Server
 
 ```bash

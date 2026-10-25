@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Http.HttpResults;
 using ClaudeWin9xServer.Models.Requests;
 using ClaudeWin9xServer.Models.Responses;
+using ClaudeWin9xServer.Services;
 using ClaudeWin9xServer.Services.Interfaces;
 using System.Diagnostics.CodeAnalysis;
 
@@ -21,6 +22,41 @@ public static class EndpointMappings
         app.MapFilesystemEndpoints();
 
         app.MapApprovalEndpoints();
+
+        app.MapRemoteClientEndpoints();
+    }
+
+    /// <summary>Endpoints used by the remote control client (ClaudeWin9x-Remote) on the retro machine.</summary>
+    [RequiresUnreferencedCode("Calls Microsoft.AspNetCore.Builder.EndpointRouteBuilderExtensions.MapPost(String, Delegate)")]
+    [RequiresDynamicCode("Calls Microsoft.AspNetCore.Builder.EndpointRouteBuilderExtensions.MapPost(String, Delegate)")]
+    private static void MapRemoteClientEndpoints(this WebApplication app)
+    {
+        app.MapPost("/remote/connect", (RemoteConnectRequest request, HttpContext context, RemoteClientService remoteClients) =>
+        {
+            var client = remoteClients.Connect(request.WindowsVersion, request.ComputerName,
+                context.Connection.RemoteIpAddress?.ToString(), request.AllowAll);
+            return TypedResults.Ok(new RemoteConnectResponse { SessionId = client.SessionId });
+        });
+
+        app.MapGet("/remote/heartbeat", Results<Ok<StatusResponse>, NotFound<ErrorResponse>> (string session_id, int? allow_all, RemoteClientService remoteClients) =>
+        {
+            if (!remoteClients.Heartbeat(session_id, allow_all == 1))
+            {
+                return TypedResults.NotFound(new ErrorResponse { Error = "Session not found" });
+            }
+
+            return TypedResults.Ok(new StatusResponse { Status = "ok" });
+        });
+
+        app.MapPost("/remote/disconnect", Results<Ok<StatusResponse>, NotFound<ErrorResponse>> (SessionIdRequest request, RemoteClientService remoteClients) =>
+        {
+            if (request.SessionId == null || !remoteClients.Disconnect(request.SessionId))
+            {
+                return TypedResults.NotFound(new ErrorResponse { Error = "Session not found" });
+            }
+
+            return TypedResults.Ok(new StatusResponse { Status = "disconnected" });
+        });
     }
 
     [RequiresUnreferencedCode("Calls Microsoft.AspNetCore.Builder.EndpointRouteBuilderExtensions.MapPost(String, Delegate)")]

@@ -14,6 +14,21 @@
 #include "transfer.h"
 #include "util.h"
 
+static char g_last_error[128];
+
+/* Logs a transfer error and keeps it for transfer_last_error() */
+static void transfer_error(const char *context, const char *message)
+{
+    strncpy(g_last_error, message, sizeof(g_last_error) - 1);
+    g_last_error[sizeof(g_last_error) - 1] = '\0';
+    log_error(context, message);
+}
+
+const char *transfer_last_error(void)
+{
+    return g_last_error[0] ? g_last_error : "Transfer failed";
+}
+
 static int read_line(SOCKET sock, char *buf, size_t bufsize)
 {
     int pos = 0;
@@ -60,11 +75,12 @@ int transfer_download(const char *remote_path, const char *local_path)
     unsigned long file_size;
     char *endptr;
 
-    printf("[Downloading %s -> %s]\n", remote_path, local_path);
+    g_last_error[0] = '\0';
+    ui_printf("[Downloading %s -> %s]\n", remote_path, local_path);
 
     sock = socket(AF_INET, SOCK_STREAM, 0);
     if (sock == INVALID_SOCKET) {
-        log_error("download", "Could not create socket");
+        transfer_error("download", "Could not create socket");
         return -1;
     }
 
@@ -73,39 +89,39 @@ int transfer_download(const char *remote_path, const char *local_path)
     server.sin_port = htons((u_short)g_state.download_port);
 
     if (connect(sock, (struct sockaddr *)&server, sizeof(server)) < 0) {
-        log_error("download", "Could not connect to file server");
+        transfer_error("download", "Could not connect to file server");
         closesocket(sock);
         return -1;
     }
 
     snprintf(request, sizeof(request), "%s\n%s\n", API_KEY, remote_path);
     if (send(sock, request, (int)strlen(request), 0) < 0) {
-        log_error("download", "Failed to send request");
+        transfer_error("download", "Failed to send request");
         closesocket(sock);
         return -1;
     }
 
     if (read_line(sock, header, sizeof(header)) < 0) {
-        log_error("download", "Timeout waiting for server response");
+        transfer_error("download", "Timeout waiting for server response");
         closesocket(sock);
         return -1;
     }
 
     if (strncmp(header, "ERROR ", 6) == 0) {
-        log_error("download", header + 6);
+        transfer_error("download", header + 6);
         closesocket(sock);
         return -1;
     }
 
     if (strncmp(header, "OK ", 3) != 0) {
-        log_error("download", "Unexpected response from server");
+        transfer_error("download", "Unexpected response from server");
         closesocket(sock);
         return -1;
     }
 
     file_size = strtoul(header + 3, &endptr, 10);
     if (endptr == header + 3 || file_size == 0) {
-        log_error("download", "Invalid file size");
+        transfer_error("download", "Invalid file size");
         closesocket(sock);
         return -1;
     }
@@ -114,7 +130,7 @@ int transfer_download(const char *remote_path, const char *local_path)
 
     fp = fopen(local_path, "wb");
     if (!fp) {
-        log_error("download", "Could not create local file");
+        transfer_error("download", "Could not create local file");
         closesocket(sock);
         return -1;
     }
@@ -135,7 +151,7 @@ int transfer_download(const char *remote_path, const char *local_path)
         tv.tv_usec = 0;
 
         if (select((int)sock + 1, &readfds, NULL, NULL, &tv) <= 0) {
-            log_error("download", "Timeout during transfer");
+            transfer_error("download", "Timeout during transfer");
             break;
         }
 
@@ -145,7 +161,7 @@ int transfer_download(const char *remote_path, const char *local_path)
         }
 
         if (fwrite(buffer, 1, (size_t)received, fp) != (size_t)received) {
-            log_error("download", "Failed to write to file");
+            transfer_error("download", "Failed to write to file");
             break;
         }
         total += (unsigned long)received;
@@ -159,13 +175,14 @@ int transfer_download(const char *remote_path, const char *local_path)
     closesocket(sock);
 
     if (total == file_size) {
-        printf("\r[Downloaded %lu bytes to %s]              \n", total,
-               local_path);
+        printf("\r");
+        ui_printf("[Downloaded %lu bytes to %s]              \n", total,
+                  local_path);
         return 0;
     }
 
-    printf("\n[Warning: Incomplete transfer %lu / %lu bytes]\n", total,
-           file_size);
+    printf("\n");
+    transfer_error("download", "Incomplete transfer");
     return -1;
 }
 
@@ -181,14 +198,16 @@ int transfer_upload(const char *local_path, const char *remote_path)
     unsigned long total = 0;
     unsigned long file_size;
 
+    g_last_error[0] = '\0';
+
     fp = fopen(local_path, "rb");
     if (!fp) {
-        log_error("upload", "Could not open local file");
+        transfer_error("upload", "Could not open local file");
         return -1;
     }
 
     if (fseek(fp, 0, SEEK_END) != 0) {
-        log_error("upload", "Could not seek to end of file");
+        transfer_error("upload", "Could not seek to end of file");
         fclose(fp);
         return -1;
     }
@@ -196,7 +215,7 @@ int transfer_upload(const char *local_path, const char *remote_path)
     {
         long ftell_result = ftell(fp);
         if (ftell_result < 0) {
-            log_error("upload", "Could not determine file size");
+            transfer_error("upload", "Could not determine file size");
             fclose(fp);
             return -1;
         }
@@ -204,17 +223,17 @@ int transfer_upload(const char *local_path, const char *remote_path)
     }
 
     if (fseek(fp, 0, SEEK_SET) != 0) {
-        log_error("upload", "Could not seek to start of file");
+        transfer_error("upload", "Could not seek to start of file");
         fclose(fp);
         return -1;
     }
 
-    printf("[Uploading %s (%lu bytes) -> %s]\n", local_path, file_size,
-           remote_path);
+    ui_printf("[Uploading %s (%lu bytes) -> %s]\n", local_path, file_size,
+              remote_path);
 
     sock = socket(AF_INET, SOCK_STREAM, 0);
     if (sock == INVALID_SOCKET) {
-        log_error("upload", "Could not create socket");
+        transfer_error("upload", "Could not create socket");
         fclose(fp);
         return -1;
     }
@@ -224,7 +243,7 @@ int transfer_upload(const char *local_path, const char *remote_path)
     server.sin_port = htons((u_short)g_state.upload_port);
 
     if (connect(sock, (struct sockaddr *)&server, sizeof(server)) < 0) {
-        log_error("upload", "Could not connect to upload server");
+        transfer_error("upload", "Could not connect to upload server");
         closesocket(sock);
         fclose(fp);
         return -1;
@@ -233,7 +252,7 @@ int transfer_upload(const char *local_path, const char *remote_path)
     snprintf(header, sizeof(header), "%s\n%s\n%lu\n", API_KEY, remote_path,
              file_size);
     if (send(sock, header, (int)strlen(header), 0) < 0) {
-        log_error("upload", "Failed to send header");
+        transfer_error("upload", "Failed to send header");
         closesocket(sock);
         fclose(fp);
         return -1;
@@ -241,7 +260,7 @@ int transfer_upload(const char *local_path, const char *remote_path)
 
     while ((bytes_read = fread(buffer, 1, sizeof(buffer), fp)) > 0) {
         if (send(sock, buffer, (int)bytes_read, 0) < 0) {
-            log_error("upload", "Failed to send data");
+            transfer_error("upload", "Failed to send data");
             fclose(fp);
             closesocket(sock);
             return -1;
@@ -256,7 +275,7 @@ int transfer_upload(const char *local_path, const char *remote_path)
     fclose(fp);
 
     if (read_line(sock, response, sizeof(response)) < 0) {
-        log_error("upload", "No response from server");
+        transfer_error("upload", "No response from server");
         closesocket(sock);
         return -1;
     }
@@ -264,16 +283,17 @@ int transfer_upload(const char *local_path, const char *remote_path)
     closesocket(sock);
 
     if (strncmp(response, "ERROR ", 6) == 0) {
-        log_error("upload", response + 6);
+        transfer_error("upload", response + 6);
         return -1;
     }
 
     if (strcmp(response, "OK") == 0) {
-        printf("\r[Uploaded %lu bytes to %s]              \n", total,
-               remote_path);
+        printf("\r");
+        ui_printf("[Uploaded %lu bytes to %s]              \n", total,
+                  remote_path);
         return 0;
     }
 
-    log_error("upload", "Unexpected response from server");
+    transfer_error("upload", "Unexpected response from server");
     return -1;
 }

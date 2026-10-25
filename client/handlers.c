@@ -5,6 +5,7 @@
 #include <conio.h>
 #include "handlers.h"
 #include "http.h"
+#include "transfer.h"
 #include "util.h"
 
 typedef struct {
@@ -20,6 +21,13 @@ static int cmd_cache_index = 0;
 
 /* Run commands in a hidden window (see execute_command_hidden) */
 static int g_hidden_exec = 0;
+
+/*
+ * COMMAND.COM ignores redirection of a batch file ("X.BAT > file" prints to
+ * the screen), so run the command in a second COMMAND.COM: the redirection
+ * then applies to that program, and batch file output is captured too.
+ */
+#define COMMAND_9X "command.com /c command /c "
 
 /* A hidden command that runs this long is assumed stuck (e.g. on a prompt) */
 #define COMMAND_TIMEOUT_MS (10 * 60 * 1000)
@@ -285,6 +293,19 @@ int handle_approval(void)
     return 1;
 }
 
+/*
+ * Adds text from this machine (in the given code page) to a JSON object as
+ * UTF-8. The server rejects results that are not valid UTF-8.
+ */
+static void add_local_string(cJSON *object, const char *name,
+                             const char *text, UINT codepage)
+{
+    char *utf8 = to_utf8(text, codepage);
+
+    cJSON_AddStringToObject(object, name, utf8 ? utf8 : "");
+    free(utf8);
+}
+
 static void handle_list_op(const char *full_path, cJSON *result)
 {
     char search_path[MAX_PATH_LEN + 8];
@@ -316,7 +337,7 @@ static void handle_list_op(const char *full_path, cJSON *result)
         }
 
         entry = cJSON_CreateObject();
-        cJSON_AddStringToObject(entry, "name", find_data.cFileName);
+        add_local_string(entry, "name", find_data.cFileName, CP_ACP);
 
         if (find_data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
             cJSON_AddStringToObject(entry, "type", "dir");
@@ -356,7 +377,7 @@ static void handle_read_op(const char *full_path, cJSON *result)
     fclose(fp);
 
     file_buffer[bytes_read] = '\0';
-    cJSON_AddStringToObject(result, "content", file_buffer);
+    add_local_string(result, "content", file_buffer, CP_ACP);
     free(file_buffer);
 }
 
@@ -364,26 +385,76 @@ static void handle_write_op(const char *full_path, const char *content,
                             cJSON *result)
 {
     FILE *fp;
+    char *local;
 
     if (!content) {
         cJSON_AddStringToObject(result, "error", "No content provided");
         return;
     }
 
+    /* The server sends UTF-8; files here use the ANSI code page */
+    local = from_utf8(content, CP_ACP);
+    if (!local) {
+        cJSON_AddStringToObject(result, "error", "Out of memory");
+        return;
+    }
+
     fp = fopen(full_path, "wb");
     if (!fp) {
+        free(local);
         cJSON_AddStringToObject(result, "error", "Could not create file");
         return;
     }
 
     {
-        size_t content_len = strlen(content);
-        size_t written = fwrite(content, 1, content_len, fp);
+        size_t content_len = strlen(local);
+        size_t written = fwrite(local, 1, content_len, fp);
         fclose(fp);
+        free(local);
         if (written != content_len) {
             cJSON_AddStringToObject(result, "error", "Write failed");
             return;
         }
+    }
+}
+
+/* Server-to-client file copy over the download port (any size, binary safe) */
+static void handle_fetch_op(const char *full_path, const char *remote_name,
+                            cJSON *result)
+{
+    if (!remote_name || !remote_name[0]) {
+        cJSON_AddStringToObject(result, "error", "No transfer name provided");
+        return;
+    }
+
+    if (transfer_download(remote_name, full_path) != 0) {
+        cJSON_AddStringToObject(result, "error", transfer_last_error());
+    }
+}
+
+/* Client-to-server file copy over the upload port */
+static void handle_send_op(const char *full_path, const char *remote_name,
+                           cJSON *result)
+{
+    DWORD attrs;
+
+    if (!remote_name || !remote_name[0]) {
+        cJSON_AddStringToObject(result, "error", "No transfer name provided");
+        return;
+    }
+
+    attrs = GetFileAttributes(full_path);
+    if (attrs == (DWORD)-1) {
+        cJSON_AddStringToObject(result, "error", "File not found");
+        return;
+    }
+    if (attrs & FILE_ATTRIBUTE_DIRECTORY) {
+        cJSON_AddStringToObject(result, "error", "Path is a directory");
+        return;
+    }
+
+    if (transfer_upload(full_path, remote_name) != 0) {
+        cJSON_AddStringToObject(result, "error", transfer_last_error());
     }
 }
 
@@ -412,6 +483,7 @@ int handle_fileop(void)
     char *result_str;
     const char *op;
     const char *cached_result;
+    char *local_path;
     HttpResult ret;
 
     if (http_request("GET", "/fs/poll", NULL, response, sizeof(response)) !=
@@ -459,17 +531,18 @@ int handle_fileop(void)
     op = operation->valuestring;
     ui_printf("[FS: %s %s]\n", op, filepath->valuestring);
 
-    if (build_full_path(filepath->valuestring, full_path, sizeof(full_path)) <
-        0) {
-        log_error("handle_fileop", "path too long or traversal rejected");
-        cJSON_Delete(json);
-        return 0;
-    }
-
     result = cJSON_CreateObject();
     cJSON_AddStringToObject(result, "op_id", op_id->valuestring);
 
-    if (strcmp(op, "list") == 0) {
+    /* Paths arrive as UTF-8; the file APIs here take the ANSI code page */
+    local_path = from_utf8(filepath->valuestring, CP_ACP);
+    if (!local_path ||
+        build_full_path(local_path, full_path, sizeof(full_path)) < 0) {
+        /* Report it to the server rather than leave it waiting */
+        log_error("handle_fileop", "path too long or traversal rejected");
+        cJSON_AddStringToObject(result, "error",
+                                "Path too long or traversal rejected");
+    } else if (strcmp(op, "list") == 0) {
         handle_list_op(full_path, result);
     } else if (strcmp(op, "read") == 0) {
         handle_read_op(full_path, result);
@@ -479,9 +552,18 @@ int handle_fileop(void)
         handle_write_op(full_path, content_str, result);
     } else if (strcmp(op, "mkdir") == 0) {
         handle_mkdir_op(full_path, result);
+    } else if (strcmp(op, "fetch") == 0) {
+        handle_fetch_op(full_path,
+                        cJSON_IsString(content) ? content->valuestring : NULL,
+                        result);
+    } else if (strcmp(op, "send") == 0) {
+        handle_send_op(full_path,
+                       cJSON_IsString(content) ? content->valuestring : NULL,
+                       result);
     } else {
         cJSON_AddStringToObject(result, "error", "Unknown operation");
     }
+    free(local_path);
 
     result_str = cJSON_PrintUnformatted(result);
     if (result_str) {
@@ -591,7 +673,8 @@ static int execute_command_9x(const char *command, char *output,
 
     get_temp_output_path(temp_file, sizeof(temp_file));
 
-    max_cmd_len = sizeof(cmdline) - 15 - 3 - strlen(temp_file) - 1;
+    max_cmd_len = sizeof(cmdline) - (sizeof(COMMAND_9X) - 1) - 3 -
+                  strlen(temp_file) - 1;
 
     if (strlen(command) > max_cmd_len) {
         strncpy(output, "Command too long", output_size - 1);
@@ -599,7 +682,7 @@ static int execute_command_9x(const char *command, char *output,
         return -1;
     }
 
-    snprintf(cmdline, sizeof(cmdline), "command.com /c %s > %s", command,
+    snprintf(cmdline, sizeof(cmdline), COMMAND_9X "%s > %s", command,
              temp_file);
 
     ui_printf("[Exec: %s]\n", cmdline);
@@ -633,7 +716,7 @@ static int execute_command_hidden(const char *command, char *output,
         len = snprintf(cmdline, sizeof(cmdline),
                        "cmd.exe /c \"%s > \"%s\" 2>&1\"", command, temp_file);
     } else {
-        len = snprintf(cmdline, sizeof(cmdline), "command.com /c %s > %s",
+        len = snprintf(cmdline, sizeof(cmdline), COMMAND_9X "%s > %s",
                        command, temp_file);
     }
 
@@ -805,7 +888,8 @@ int handle_command(void)
 
     result = cJSON_CreateObject();
     cJSON_AddStringToObject(result, "command_id", cmd_id->valuestring);
-    cJSON_AddStringToObject(result, "stdout", cmd_output);
+    /* Console programs write in the OEM code page */
+    add_local_string(result, "stdout", cmd_output, CP_OEMCP);
     cJSON_AddStringToObject(result, "stderr", "");
     cJSON_AddNumberToObject(result, "exit_code", exit_code);
 

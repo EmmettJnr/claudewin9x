@@ -23,7 +23,7 @@ TARGET = ClaudeWin9x-Gui.exe
 RESOURCE_RES = ClaudeGui.res
 
 GUI_OBJECTS = StdAfx.obj ClaudeGui.obj ClaudeGuiDlg.obj ApprovalDlg.obj
-CORE_OBJECTS = gui_core.obj http.obj handlers.obj util.obj cJSON.obj
+CORE_OBJECTS = gui_core.obj http.obj handlers.obj transfer.obj util.obj cJSON.obj
 OBJECTS = $(GUI_OBJECTS) $(CORE_OBJECTS)
 
 all: $(TARGET)
@@ -42,8 +42,11 @@ gui_core.obj: gui_core.c gui_core.h ..\claude.h ..\util.h ..\handlers.h
 http.obj: ..\http.c ..\http.h ..\claude.h
 	$(CC) $(CFLAGS) /c ..\http.c
 
-handlers.obj: ..\handlers.c ..\handlers.h ..\claude.h ..\util.h
+handlers.obj: ..\handlers.c ..\handlers.h ..\claude.h ..\util.h ..\transfer.h
 	$(CC) $(CFLAGS) /c ..\handlers.c
+
+transfer.obj: ..\transfer.c ..\transfer.h ..\claude.h ..\util.h
+	$(CC) $(CFLAGS) /c ..\transfer.c
 
 util.obj: ..\util.c ..\util.h ..\claude.h
 	$(CC) $(CFLAGS) /c ..\util.c

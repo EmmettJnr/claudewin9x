@@ -56,6 +56,19 @@ public class FileSystemService(
         }
     }
 
+    public Task<FileOpResult?> QueueOperationAsync(string operation, string path, string? content, TimeSpan timeout, CancellationToken cancellationToken = default)
+    {
+        var op = new FileOperation
+        {
+            Id = IdGenerator.NewId(),
+            Operation = operation,
+            Path = path,
+            Content = content,
+            Status = "pending"
+        };
+        return QueueOperationAsync(op, timeout, cancellationToken);
+    }
+
     public Task<FileOpResult?> ListDirectoryAsync(string path, CancellationToken cancellationToken = default)
     {
         var op = new FileOperation

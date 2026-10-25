@@ -13,6 +13,7 @@ public class SessionService(
     private readonly int _heartbeatTimeoutSeconds = heartbeatTimeoutSeconds;
     private CancellationTokenSource? _cleanupCts;
     private Task? _cleanupTask;
+    private bool _disposed;
 
     public ConcurrentDictionary<string, ClaudeSession> Sessions => _sessions;
 
@@ -150,8 +151,15 @@ public class SessionService(
         }
     }
 
+    // Registered under several service types, so the container calls this more than once
     public void Dispose()
     {
+        if (_disposed)
+        {
+            return;
+        }
+        _disposed = true;
+
         _cleanupCts?.Cancel();
         _cleanupCts?.Dispose();
 

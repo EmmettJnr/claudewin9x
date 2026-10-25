@@ -165,6 +165,11 @@ int build_full_path(const char *relative, char *out, size_t out_size)
 
     if (!relative || relative[0] == '\0') {
         len = snprintf(out, out_size, "C:\\");
+    } else if (((relative[0] >= 'A' && relative[0] <= 'Z') ||
+                (relative[0] >= 'a' && relative[0] <= 'z')) &&
+               relative[1] == ':') {
+        /* Already has a drive letter */
+        len = snprintf(out, out_size, "%s", relative);
     } else if (relative[0] == '/' || relative[0] == '\\') {
         len = snprintf(out, out_size, "C:%s", relative);
     } else {
@@ -357,4 +362,130 @@ void config_load(const char *filename)
     }
 
     fclose(fp);
+}
+
+/* Copy of text with bytes >= 0x80 replaced by '?', so always valid UTF-8 */
+static char *ascii_only(const char *text)
+{
+    char *out = strdup(text);
+    char *p;
+
+    if (out) {
+        for (p = out; *p; p++) {
+            if ((unsigned char)*p >= 0x80) {
+                *p = '?';
+            }
+        }
+    }
+    return out;
+}
+
+/*
+ * UTF-8 is encoded and decoded by hand (via UTF-16) rather than with
+ * CP_UTF8, which Windows 95 does not support.
+ */
+char *to_utf8(const char *text, UINT codepage)
+{
+    WCHAR *wide;
+    char *out;
+    char *p;
+    int wlen;
+    int i;
+
+    wlen = MultiByteToWideChar(codepage, 0, text, -1, NULL, 0);
+    if (wlen <= 0) {
+        return ascii_only(text);
+    }
+
+    wide = (WCHAR *)malloc(wlen * sizeof(WCHAR));
+    /* Each UTF-16 unit becomes at most 3 UTF-8 bytes */
+    out = (char *)malloc((size_t)wlen * 3 + 1);
+    if (!wide || !out) {
+        free(wide);
+        free(out);
+        return NULL;
+    }
+
+    MultiByteToWideChar(codepage, 0, text, -1, wide, wlen);
+
+    p = out;
+    for (i = 0; i < wlen && wide[i]; i++) {
+        unsigned int c = wide[i];
+
+        if (c < 0x80) {
+            *p++ = (char)c;
+        } else if (c < 0x800) {
+            *p++ = (char)(0xC0 | (c >> 6));
+            *p++ = (char)(0x80 | (c & 0x3F));
+        } else if (c >= 0xD800 && c <= 0xDFFF) {
+            /* Surrogates never come from ANSI/OEM code pages */
+            *p++ = '?';
+        } else {
+            *p++ = (char)(0xE0 | (c >> 12));
+            *p++ = (char)(0x80 | ((c >> 6) & 0x3F));
+            *p++ = (char)(0x80 | (c & 0x3F));
+        }
+    }
+    *p = '\0';
+
+    free(wide);
+    return out;
+}
+
+char *from_utf8(const char *text, UINT codepage)
+{
+    const unsigned char *s = (const unsigned char *)text;
+    WCHAR *wide;
+    WCHAR *w;
+    char *out;
+    int len;
+
+    wide = (WCHAR *)malloc((strlen(text) + 1) * sizeof(WCHAR));
+    if (!wide) {
+        return NULL;
+    }
+
+    /* Each test on s[n] only runs if s[n - 1] was a continuation byte,
+     * so this never reads past the terminator */
+    w = wide;
+    while (*s) {
+        unsigned int c = *s;
+
+        if (c < 0x80) {
+            *w++ = (WCHAR)c;
+            s++;
+        } else if ((c & 0xE0) == 0xC0 && (s[1] & 0xC0) == 0x80) {
+            *w++ = (WCHAR)(((c & 0x1F) << 6) | (s[1] & 0x3F));
+            s += 2;
+        } else if ((c & 0xF0) == 0xE0 && (s[1] & 0xC0) == 0x80 &&
+                   (s[2] & 0xC0) == 0x80) {
+            *w++ = (WCHAR)(((c & 0x0F) << 12) | ((s[1] & 0x3F) << 6) |
+                           (s[2] & 0x3F));
+            s += 3;
+        } else if ((c & 0xF8) == 0xF0 && (s[1] & 0xC0) == 0x80 &&
+                   (s[2] & 0xC0) == 0x80 && (s[3] & 0xC0) == 0x80) {
+            /* Outside the BMP (e.g. emoji): no code page equivalent */
+            *w++ = '?';
+            s += 4;
+        } else {
+            /* Invalid UTF-8 */
+            *w++ = '?';
+            s++;
+        }
+    }
+    *w = 0;
+
+    len = WideCharToMultiByte(codepage, 0, wide, -1, NULL, 0, NULL, NULL);
+    if (len <= 0) {
+        free(wide);
+        return strdup(text);
+    }
+
+    out = (char *)malloc(len);
+    if (out) {
+        WideCharToMultiByte(codepage, 0, wide, -1, out, len, NULL, NULL);
+    }
+
+    free(wide);
+    return out;
 }

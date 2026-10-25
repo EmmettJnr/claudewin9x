@@ -33,6 +33,25 @@ public static class IniConfig
             : throw new ArgumentOutOfRangeException(nameof(value), $"Port must be between {MinPort} and {MaxPort}");
     } = 5002;
 
+    /// <summary>
+    /// Port for the remote control API (MCP) used by a Claude Code session elsewhere; 0 disables it.
+    /// Kept separate from api_port so a firewall can expose it to different hosts.
+    /// </summary>
+    public static int RemotePort
+    {
+        get;
+        private set => field = value is 0 or (>= MinPort and <= MaxPort)
+            ? value
+            : throw new ArgumentOutOfRangeException(nameof(value), $"Port must be 0 or between {MinPort} and {MaxPort}");
+    }
+
+    /// <summary>Bearer token required on the remote port.</summary>
+    public static string? RemoteToken { get; private set; }
+
+    public const int MinRemoteTokenLength = 16;
+
+    public static bool RemoteEnabled => RemotePort != 0 && RemoteToken is { Length: >= MinRemoteTokenLength };
+
     public static void Load(string filename = "server.ini")
     {
         var path = Path.Combine(AppContext.BaseDirectory, filename);
@@ -64,9 +83,22 @@ public static class IniConfig
             UploadPort = ulPort;
         }
 
+        if (config.TryGetValue("remote_port", out var rp) && int.TryParse(rp, out var remotePort))
+        {
+            RemotePort = remotePort;
+        }
+        if (config.TryGetValue("remote_token", out var rt) && rt.Length > 0)
+        {
+            RemoteToken = rt;
+        }
+
         if (ApiPort == DownloadPort || ApiPort == UploadPort || DownloadPort == UploadPort)
         {
             throw new InvalidOperationException("api_port, download_port, and upload_port must all be different");
+        }
+        if (RemotePort != 0 && (RemotePort == ApiPort || RemotePort == DownloadPort || RemotePort == UploadPort))
+        {
+            throw new InvalidOperationException("remote_port must differ from the other ports");
         }
     }
 }

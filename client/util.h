@@ -38,4 +38,13 @@ void log_error(const char *context, const char *message);
 
 void config_load(const char *filename);
 
+/*
+ * Convert between a Windows code page (CP_ACP for file contents and names,
+ * CP_OEMCP for console output) and UTF-8, which the server requires.
+ * Return a malloc'd string, or NULL if out of memory.
+ */
+char *to_utf8(const char *text, UINT codepage);
+
+char *from_utf8(const char *text, UINT codepage);
+
 #endif /* UTIL_H */

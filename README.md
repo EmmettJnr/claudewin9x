@@ -196,13 +196,16 @@ C:\Projects\GAME> edit MAIN.C        (opens in $EDITOR here, saves it back)
 
 Directories and drives are tracked like DOS (`cd`, `cd..`, `D:`), Tab completes retro file names, and history (up arrow, Ctrl-R) is kept in `~/.local/state/w98sh_history`. `get`, `put` and `edit` move files; `lcd` and `!command` work on the local machine. `w98sh dir C:\` runs a single command and exits (`-d DIR` sets the directory).
 
-Configure it in `~/.config/w98sh.ini` (or `W98SH_URL` / `W98SH_TOKEN`):
+Configure it in `~/.config/w98sh.ini` (or `W98SH_URL` / `W98SH_TOKEN` / `W98SH_EDITOR`):
 
 ```ini
 [w98sh]
 url = http://<server>:5003/mcp
 token = <remote_token>
+editor = code          ; optional, for edit; defaults to $VISUAL / $EDITOR
 ```
+
+VS Code, VSCodium, Cursor, Zed and Sublime get `--wait` added automatically. If an editor returns straight away anyway (because it opened in an existing window), `edit` waits for you to press Enter once you have saved.
 
 It is not a real console: programs get no keyboard input (no EDIT, games or prompts), output appears when a command finishes, and Ctrl-C only stops waiting.
 

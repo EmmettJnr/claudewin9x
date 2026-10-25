@@ -16,7 +16,9 @@ Configuration, from the environment or ~/.config/w98sh.ini:
     url = http://server:5003/mcp
     token = <remote_token from the server's server.ini>
 
-W98SH_URL and W98SH_TOKEN override the file.
+    editor = code --wait     (optional, for edit; else $VISUAL, $EDITOR)
+
+W98SH_URL, W98SH_TOKEN and W98SH_EDITOR override the file.
 """
 
 import argparse
@@ -31,6 +33,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import urllib.error
 import urllib.request
 
@@ -47,6 +50,12 @@ HISTORY_PATH = os.path.join(
 DEFAULT_TIMEOUT = 120
 # Largest base64 page the server returns per read_file call
 READ_CHUNK = 262144
+# GUI editors that return at once unless told to wait for the file to close
+WAIT_FLAGS = {"code": "--wait", "code-insiders": "--wait", "codium": "--wait",
+              "cursor": "--wait", "zed": "--wait", "subl": "--wait"}
+# An editor that exits this quickly without changes probably opened elsewhere
+DETACHED_EDITOR_SECONDS = 2
+
 # COMMAND.COM keeps ~127 characters of a command line, and the client adds
 # its own wrapper and output redirection
 LONG_COMMAND = 85
@@ -128,9 +137,10 @@ def split_args(text):
 
 
 class Shell:
-    def __init__(self, remote, timeout):
+    def __init__(self, remote, timeout, editor=None):
         self.remote = remote
         self.timeout = timeout
+        self.editor = editor
         self.drive = "C:"
         self.cwd = {"C:": "\\"}  # current directory per drive, as DOS keeps it
         self._listings = {}  # directory -> (dirs, files), until the next command
@@ -319,15 +329,28 @@ class Shell:
             original = b""
             print(f"(new file {remote})")
 
-        editor = os.environ.get("VISUAL") or os.environ.get("EDITOR") or "vi"
         tmpdir = tempfile.mkdtemp(prefix="w98sh-")
         try:
             local = os.path.join(tmpdir, ntpath.basename(remote))
             with open(local, "wb") as f:
                 f.write(original)
-            subprocess.call(shlex.split(editor) + [local])
+
+            started = time.monotonic()
+            subprocess.call(self.editor_command() + [local])
             with open(local, "rb") as f:
                 edited = f.read()
+
+            if edited == original and time.monotonic() - started < DETACHED_EDITOR_SECONDS:
+                print("The editor returned straight away, so it probably opened in another "
+                      "window.\nSave the file there, then press Enter here to send it "
+                      "(Ctrl-C cancels).")
+                try:
+                    input()
+                except (KeyboardInterrupt, EOFError):
+                    print("\nNot saved")
+                    return 1
+                with open(local, "rb") as f:
+                    edited = f.read()
         finally:
             shutil.rmtree(tmpdir, ignore_errors=True)
 
@@ -340,6 +363,14 @@ class Shell:
         self.write_bytes(remote, edited)
         print(f"Saved {len(edited)} bytes to {remote}")
         return 0
+
+    def editor_command(self):
+        editor = shlex.split(self.editor or os.environ.get("VISUAL")
+                             or os.environ.get("EDITOR") or "vi")
+        flag = WAIT_FLAGS.get(os.path.basename(editor[0]))
+        if flag and flag not in editor and "-w" not in editor:
+            editor.append(flag)
+        return editor
 
     def lcd(self, args):
         if args:
@@ -422,17 +453,20 @@ class Shell:
 
 
 def load_config():
-    url = os.environ.get("W98SH_URL")
-    token = os.environ.get("W98SH_TOKEN")
-    if not (url and token) and os.path.exists(CONFIG_PATH):
+    """(url, token, editor) from the environment, then the config file."""
+    section = {}
+    if os.path.exists(CONFIG_PATH):
         config = configparser.ConfigParser()
         config.read(CONFIG_PATH)
-        section = config["w98sh"] if config.has_section("w98sh") else {}
-        url = url or section.get("url")
-        token = token or section.get("token")
+        if config.has_section("w98sh"):
+            section = config["w98sh"]
+
+    url = os.environ.get("W98SH_URL") or section.get("url")
+    token = os.environ.get("W98SH_TOKEN") or section.get("token")
+    editor = os.environ.get("W98SH_EDITOR") or section.get("editor")
     if not (url and token):
         sys.exit(f"w98sh: set url and token in {CONFIG_PATH} (or W98SH_URL and W98SH_TOKEN)")
-    return url, token
+    return url, token, editor
 
 
 def main():
@@ -445,8 +479,9 @@ def main():
     parser.add_argument("command", nargs=argparse.REMAINDER, help="command to run, then exit")
     args = parser.parse_args()
 
-    remote = Remote(*load_config())
-    shell = Shell(remote, max(5, min(args.timeout, 600)))
+    url, token, editor = load_config()
+    remote = Remote(url, token)
+    shell = Shell(remote, max(5, min(args.timeout, 600)), editor)
 
     try:
         remote.initialize()
